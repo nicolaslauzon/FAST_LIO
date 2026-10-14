@@ -81,6 +81,10 @@ void Preprocess::process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointClo
   case MARSIM:
     sim_handler(msg);
     break;
+
+  case HESAI: // LIO Bench
+    hesai_handler(msg);
+    break;
   
   default:
     printf("Error LiDAR Type");
@@ -477,6 +481,40 @@ void Preprocess::sim_handler(const sensor_msgs::PointCloud2::ConstPtr &msg) {
         added_pt.normal_z = 0;
         added_pt.curvature = 0.0;
         pl_surf.points.push_back(added_pt);
+    }
+}
+
+// LIO Bench: per-point time relative to the header stamp, from the absolute float64 `timestamp`
+// (the scan's points need no yaw-based time estimate). No feature extraction.
+void Preprocess::hesai_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
+{
+    pl_surf.clear();
+    pl_corn.clear();
+    pl_full.clear();
+
+    pcl::PointCloud<hesai_ros::Point> pl_orig;
+    pcl::fromROSMsg(*msg, pl_orig);
+    int plsize = pl_orig.points.size();
+    if (plsize == 0) return;
+    pl_surf.reserve(plsize);
+    given_offset_time = true;
+
+    const double time_head = msg->header.stamp.toSec();
+    for (int i = 0; i < plsize; i++)
+    {
+      if (i % point_filter_num != 0) continue;
+      const hesai_ros::Point &p = pl_orig.points[i];
+      if (p.x * p.x + p.y * p.y + p.z * p.z <= blind * blind) continue;
+      PointType added_pt;
+      added_pt.x = p.x;
+      added_pt.y = p.y;
+      added_pt.z = p.z;
+      added_pt.intensity = p.intensity;
+      added_pt.normal_x = 0;
+      added_pt.normal_y = 0;
+      added_pt.normal_z = 0;
+      added_pt.curvature = (p.timestamp - time_head) * time_unit_scale; // curvature unit: ms
+      pl_surf.points.push_back(added_pt);
     }
 }
 
